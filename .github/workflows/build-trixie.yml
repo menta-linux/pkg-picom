@@ -155,7 +155,7 @@ jobs:
           ARCH="$(dpkg --print-architecture)"
           DEB="$(find _build -maxdepth 1 -type f -name "picom_*_${ARCH}.deb" -print -quit)"
           test -n "${DEB}"
-          apt-get install -y "${DEB}"
+          apt-get install -y "./${DEB}"
 
       - name: Verify installed picom
         shell: bash
