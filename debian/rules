@@ -1,0 +1,33 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export CC = /usr/bin/cc
+
+# Builds are performed from an extracted upstream release under _build/.
+# Prevent picom's Meson git detection from walking into the enclosing
+# pkg-picom repository and embedding the packaging repository revision.
+export GIT_CEILING_DIRECTORIES := $(abspath $(CURDIR)/..)
+
+include /usr/share/dpkg/architecture.mk
+
+%:
+	dh $@ --buildsystem=meson --builddirectory=build-wobbly
+
+override_dh_auto_configure:
+	eval "$$(dpkg-buildflags --export=sh)"; \
+	meson setup build-wobbly \
+		--prefix=/usr \
+		--libdir=lib/$(DEB_HOST_MULTIARCH) \
+		--sysconfdir=/etc \
+		--localstatedir=/var \
+		--buildtype=debugoptimized \
+		--wrap-mode=nodownload \
+		-Dopengl=true \
+		-Dunittest=true \
+		-Dwith_docs=true \
+		-Dcompton=false \
+		-Ddbus=true \
+		-Dregex=true
+
+override_dh_auto_test:
+	meson test -C build-wobbly --print-errorlogs

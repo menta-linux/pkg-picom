@@ -1,0 +1,53 @@
+Source: picom
+Section: x11
+Priority: optional
+Maintainer: Kerem Söke <keremsoke@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ asciidoctor,
+ meson,
+ ninja-build,
+ pkgconf,
+ libconfig-dev (>= 1.7),
+ libdbus-1-dev,
+ libegl-dev,
+ libev-dev,
+ libgl-dev,
+ libepoxy-dev,
+ libpcre2-dev,
+ libpixman-1-dev,
+ libx11-dev,
+ libx11-xcb-dev,
+ libxcb1-dev,
+ libxcb-composite0-dev,
+ libxcb-damage0-dev,
+ libxcb-glx0-dev,
+ libxcb-image0-dev,
+ libxcb-present-dev,
+ libxcb-randr0-dev,
+ libxcb-render0-dev,
+ libxcb-render-util0-dev,
+ libxcb-shape0-dev,
+ libxcb-sync-dev,
+ libxcb-util-dev,
+ libxcb-xfixes0-dev,
+ uthash-dev
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/KeremSoke/picom
+Vcs-Git: https://github.com/menta-linux/pkg-picom.git
+Vcs-Browser: https://github.com/menta-linux/pkg-picom
+
+Package: picom
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends}
+Recommends:
+ x11-utils
+Description: lightweight compositor for X11 with wobbly windows
+ picom is a lightweight compositor for X11 based on xcompmgr. It provides
+ shadows, fading, transparency, animations and OpenGL accelerated compositing.
+ .
+ This Menta Linux build is based on KeremSoke/picom and includes a
+ KWin-inspired wobbly windows effect for the GLX and EGL backends.

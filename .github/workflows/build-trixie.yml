@@ -1,0 +1,187 @@
+name: Build for Debian 13
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PICOM_REPO: KeremSoke/picom
+  PICOM_TAG: v13-wobbly1
+  PICOM_COMMIT: 0c0ea90db37828c11ec73dd8c77c4c5ed5429a9a
+
+jobs:
+  build:
+    name: Build picom wobbly for Debian 13
+    runs-on: ubuntu-latest
+
+    container:
+      image: debian:trixie
+
+    steps:
+      - name: Check out Menta packaging
+        uses: actions/checkout@v4
+
+      - name: Install bootstrap tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            git \
+            build-essential \
+            devscripts \
+            equivs \
+            lintian
+
+      - name: Install package build dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mk-build-deps \
+            --install \
+            --remove \
+            --tool 'apt-get -y --no-install-recommends' \
+            debian/control
+
+      - name: Determine package version
+        id: version
+        shell: bash
+        run: |
+          set -euxo pipefail
+          VERSION="$(dpkg-parsechangelog -l debian/changelog -S Version)"
+          UPSTREAM_VERSION="${VERSION%%-*}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "upstream=${UPSTREAM_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Debian version: ${VERSION}"
+          echo "Upstream version: ${UPSTREAM_VERSION}"
+
+      - name: Verify immutable upstream tag
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ACTUAL_COMMIT="$({
+            git ls-remote \
+              "https://github.com/${PICOM_REPO}.git" \
+              "refs/tags/${PICOM_TAG}" || true
+          } | awk 'NR == 1 {print $1}')"
+          test -n "${ACTUAL_COMMIT}"
+          echo "Expected: ${PICOM_COMMIT}"
+          echo "Actual:   ${ACTUAL_COMMIT}"
+          test "${ACTUAL_COMMIT}" = "${PICOM_COMMIT}"
+
+      - name: Download upstream source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          UPSTREAM="${{ steps.version.outputs.upstream }}"
+          SOURCE="_build/picom-${UPSTREAM}"
+          mkdir -p "${SOURCE}"
+          curl \
+            --fail \
+            --location \
+            --retry 3 \
+            "https://github.com/${PICOM_REPO}/archive/refs/tags/${PICOM_TAG}.tar.gz" \
+            --output "_build/picom_${UPSTREAM}.orig.tar.gz"
+          tar \
+            -xzf "_build/picom_${UPSTREAM}.orig.tar.gz" \
+            --strip-components=1 \
+            -C "${SOURCE}"
+          cp -a debian "${SOURCE}/"
+
+      - name: Verify upstream source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          UPSTREAM="${{ steps.version.outputs.upstream }}"
+          SOURCE="_build/picom-${UPSTREAM}"
+          grep -Fq "version: '13'" "${SOURCE}/meson.build"
+          grep -Fq "'wobbly.c'" "${SOURCE}/src/wm/meson.build"
+          grep -Fq 'SPDX-License-Identifier: GPL-2.0-or-later' "${SOURCE}/src/wm/wobbly.c"
+          grep -Fq 'wobbly-windows' "${SOURCE}/wobbly.md"
+
+      - name: Verify source cannot see packaging Git repository
+        shell: bash
+        run: |
+          set -euxo pipefail
+          UPSTREAM="${{ steps.version.outputs.upstream }}"
+          SOURCE="$GITHUB_WORKSPACE/_build/picom-${UPSTREAM}"
+          CEILING="$(dirname "${SOURCE}")"
+          if GIT_CEILING_DIRECTORIES="${CEILING}" \
+            git -C "${SOURCE}" rev-parse --show-toplevel; then
+            echo 'ERROR: extracted upstream source can see an enclosing Git repository'
+            exit 1
+          fi
+
+      - name: Build Debian source and binary packages
+        shell: bash
+        run: |
+          set -euxo pipefail
+          UPSTREAM="${{ steps.version.outputs.upstream }}"
+          cd "_build/picom-${UPSTREAM}"
+          dpkg-buildpackage -us -uc
+
+      - name: Run Lintian
+        shell: bash
+        run: |
+          set -euxo pipefail
+          lintian --fail-on error _build/*.changes
+
+      - name: Inspect package contents
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ARCH="$(dpkg --print-architecture)"
+          DEB="$(find _build -maxdepth 1 -type f -name "picom_*_${ARCH}.deb" -print -quit)"
+          test -n "${DEB}"
+          dpkg-deb --info "${DEB}"
+          dpkg-deb --contents "${DEB}"
+          dpkg-deb --contents "${DEB}" | grep -F '/usr/bin/picom'
+          dpkg-deb --contents "${DEB}" | grep -F '/usr/bin/picom-trans'
+          dpkg-deb --contents "${DEB}" | grep -F '/usr/bin/picom-inspect'
+          dpkg-deb --contents "${DEB}" | grep -F '/usr/share/man/man1/picom.1.gz'
+          dpkg-deb --contents "${DEB}" | grep -F 'wobbly.md'
+
+      - name: Install built package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ARCH="$(dpkg --print-architecture)"
+          DEB="$(find _build -maxdepth 1 -type f -name "picom_*_${ARCH}.deb" -print -quit)"
+          test -n "${DEB}"
+          apt-get install -y "${DEB}"
+
+      - name: Verify installed picom
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dpkg-query -W -f='${Package} ${Version}\n' picom
+          test "$(dpkg-query -W -f='${Version}' picom)" = '${{ steps.version.outputs.version }}'
+          picom --version
+          picom --help 2>&1 | grep -F -- '--wobbly-windows'
+
+      - name: List build artifacts
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ls -lah _build/
+
+      - name: Upload Debian packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: picom-wobbly-debian13-${{ steps.version.outputs.version }}
+          path: |
+            _build/*.deb
+            _build/*.ddeb
+            _build/*.dsc
+            _build/*.changes
+            _build/*.buildinfo
+            _build/*.debian.tar.*
+            _build/*.orig.tar.*
+          if-no-files-found: error

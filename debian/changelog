@@ -1,0 +1,9 @@
+picom (13+wobbly1-1menta1) trixie; urgency=medium
+
+  * Initial Menta Linux package.
+  * Package KeremSoke/picom v13-wobbly1.
+  * Include KWin-inspired wobbly windows support.
+  * Enable OpenGL and upstream unit tests.
+  * Build with Meson debugoptimized build type.
+
+ -- Kerem Söke <keremsoke@gmail.com>  Mon, 05 Oct 2026 14:42:00 -0700
